@@ -1,0 +1,33 @@
+{
+  "name": "bsc-arbitrage-bot",
+  "version": "1.0.0",
+  "description": "BSC Arbitrage Bot: PancakeSwap V2 + Biswap integration, scanner, Telegram alerts, CSV logs, tests, deployment.",
+  "main": "bot/scanner.ts",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "lint": "echo \"no lint configured\"",
+    "deploy:testnet": "hardhat run --network bscTestnet scripts/deploy.ts",
+    "deploy:mainnet": "hardhat run --network bscMainnet scripts/deploy.ts",
+    "start:scanner": "ts-node --project tsconfig.json bot/scanner.ts",
+    "start:executor": "ts-node --project tsconfig.json bot/executor.ts",
+    "verify:deploy": "hardhat run --network bscTestnet scripts/verify_deploy.ts"
+  },
+  "author": "adej0",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^3.0.0",
+    "@types/node": "^18.0.0",
+    "chai": "^4.3.7",
+    "hardhat": "^2.16.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.6"
+  },
+  "dependencies": {
+    "csv-writer": "^1.6.0",
+    "dotenv": "^16.0.0",
+    "ethers": "^6.9.0",
+    "node-telegram-bot-api": "^0.61.0",
+    "@openzeppelin/contracts": "^4.9.0"
+  }
+}
