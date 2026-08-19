@@ -1,7 +1,6 @@
 {
   "name": "bsc-arbitrage-bot",
   "version": "1.0.0",
-  "type": "module",
   "description": "BSC Arbitrage Bot: PancakeSwap V2 + Biswap integration, scanner, Telegram alerts, CSV logs, tests, deployment.",
   "main": "bot/scanner.ts",
   "scripts": {
