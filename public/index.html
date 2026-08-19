@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BSC Testnet Arbitrage Console</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="panel">
+      <h1>BSC Testnet Arbitrage Console</h1>
+      <p class="subtitle">Click-only actions for the live testnet contract and router approvals.</p>
+
+      <div class="actions">
+        <button id="connect-wallet">Connect wallet</button>
+        <button id="load-contract">Load live contract</button>
+        <button id="wrap-bnb">Wrap BNB to WBNB</button>
+        <button id="check-route">Check live pair</button>
+        <button id="preflight-check">Preflight check</button>
+        <button id="approve-contract">Approve contract (approve WBNB → contract)</button>
+        <button id="execute-trade">Execute arbitrage</button>
+      </div>
+
+      <div class="router-tools">
+        <label>Router presets
+          <select id="router-presets">
+            <option value="custom">Custom (leave fields below)</option>
+            <option value="pancake-test">PancakeSwap Testnet (recommended)</option>
+            <option value="pancake-main">PancakeSwap Mainnet</option>
+          </select>
+        </label>
+        <button id="auto-fill-routers">Auto-fill known testnet routers</button>
+      </div>
+
+      <div class="field-grid">
+        <label>Contract address
+          <input id="contract-address" type="text" value="0x7AA098f346740d6Ad31596d2B80E2F9FeB2fe7f4" />
+        </label>
+        <label>Token in
+          <input id="token-in" type="text" value="0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" />
+        </label>
+        <label>Token out
+          <input id="token-out" type="text" value="0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee" />
+        </label>
+        <label>Router 1
+          <input id="router-1" type="text" value="0xD99D1c33F9fC3444f8101754aBC46c52416550D1" />
+        </label>
+        <label>Router 2
+          <input id="router-2" type="text" value="0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8" />
+        </label>
+        <label>Amount in
+          <input id="amount-in" type="text" value="0.01" />
+        </label>
+        <label>Slippage (bps)
+          <input id="slippage-bps" type="number" value="50" min="0" max="10000" />
+        </label>
+        <label>Min profit
+          <input id="min-profit" type="text" value="0" />
+        </label>
+        <label style="grid-column: 1 / -1;">
+          <input id="approve-max" type="checkbox" /> Approve Max (set unlimited allowance for the contract)
+        </label>
+        <div style="grid-column: 1 / -1; display:flex; gap:8px;">
+          <button id="wrap-more">Wrap more (use Amount in)</button>
+          <button id="approve-contract-max">Approve contract (force Max)</button>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <div><strong>Phase:</strong> <span id="phase">Waiting for wallet</span></div>
+        <div><strong>Network:</strong> <span id="network">not connected</span></div>
+        <div><strong>Wallet:</strong> <span id="wallet">--</span></div>
+        <div><strong>Wallet BNB:</strong> <span id="bnb-balance">--</span></div>
+        <div><strong>WBNB balance:</strong> <span id="wbnb-balance">--</span></div>
+        <div><strong>Owner:</strong> <span id="owner">--</span></div>
+        <div><strong>Contract:</strong> <span id="contract-status">--</span></div>
+      </div>
+
+      <div style="margin-top:8px;">
+        <button id="diagnostics">Diagnostics & simulate</button>
+      </div>
+
+      <pre id="status">Waiting for a wallet connection...</pre>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.0/dist/ethers.umd.min.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

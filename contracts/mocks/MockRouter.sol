@@ -42,7 +42,7 @@ contract MockRouter is IUniswapV2Router02 {
         // transfer amountIn from caller to this contract
         require(IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn), "transferFrom failed");
         // compute output amount by ratio
-        uint[] memory out = getAmountsOut(amountIn, path);
+        uint[] memory out = this.getAmountsOut(amountIn, path);
         // send out[last] tokens to `to`
         require(IERC20(path[path.length - 1]).transfer(to, out[out.length - 1]), "transfer to failed");
         return out;
