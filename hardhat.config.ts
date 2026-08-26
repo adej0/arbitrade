@@ -43,12 +43,8 @@ const config: HardhatUserConfig = {
     hardhat: {
       // default hardhat config
     },
-    bscTestnet: {
-      ...bscNetwork(RPC_TESTNET, 97)
-    },
-    bscMainnet: {
-      ...bscNetwork(RPC_MAINNET, 56)
-    }
+    bscTestnet: bscNetwork(RPC_TESTNET, 97),
+    bscMainnet: bscNetwork(RPC_MAINNET, 56)
   },
 
   etherscan: {
