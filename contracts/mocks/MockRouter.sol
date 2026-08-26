@@ -22,6 +22,10 @@ contract MockRouter is IUniswapV2Router02 {
     }
 
     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts) {
+        return _getAmountsOut(amountIn, path);
+    }
+
+    function _getAmountsOut(uint amountIn, address[] memory path) internal view returns (uint[] memory amounts) {
         require(path.length >= 2, "bad path");
         amounts = new uint[](path.length);
         amounts[0] = amountIn;
@@ -42,7 +46,7 @@ contract MockRouter is IUniswapV2Router02 {
         // transfer amountIn from caller to this contract
         require(IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn), "transferFrom failed");
         // compute output amount by ratio
-        uint[] memory out = getAmountsOut(amountIn, path);
+        uint[] memory out = _getAmountsOut(amountIn, path);
         // send out[last] tokens to `to`
         require(IERC20(path[path.length - 1]).transfer(to, out[out.length - 1]), "transfer to failed");
         return out;
