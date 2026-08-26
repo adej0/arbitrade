@@ -11,17 +11,32 @@ contract MockRouter is IUniswapV2Router02 {
     uint public num;
     uint public den;
 
+    // Fraction of the quoted output that is actually delivered, in basis points. 10000 delivers
+    // exactly what getAmountsOut quoted; lower values emulate a router (or fee-on-transfer
+    // token) whose reported amounts do not match the tokens it actually transfers.
+    uint public deliveryBps = 10000;
+
     constructor(uint _num, uint _den) {
         require(_den > 0, "den=0");
         num = _num;
         den = _den;
     }
 
+    function setDeliveryBps(uint _deliveryBps) external {
+        require(_deliveryBps <= 10000, "deliveryBps>10000");
+        deliveryBps = _deliveryBps;
+    }
+
     function setRatio(uint _num, uint _den) external {
+        require(_den > 0, "den=0");
         num = _num; den = _den;
     }
 
     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts) {
+        return _getAmountsOut(amountIn, path);
+    }
+
+    function _getAmountsOut(uint amountIn, address[] memory path) internal view returns (uint[] memory amounts) {
         require(path.length >= 2, "bad path");
         amounts = new uint[](path.length);
         amounts[0] = amountIn;
@@ -34,17 +49,20 @@ contract MockRouter is IUniswapV2Router02 {
 
     function swapExactTokensForTokens(
         uint amountIn,
-        uint /*amountOutMin*/,
+        uint amountOutMin,
         address[] calldata path,
         address to,
-        uint /*deadline*/
+        uint deadline
     ) external returns (uint[] memory amounts) {
+        require(deadline >= block.timestamp, "EXPIRED");
         // transfer amountIn from caller to this contract
         require(IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn), "transferFrom failed");
         // compute output amount by ratio
-        uint[] memory out = getAmountsOut(amountIn, path);
+        uint[] memory out = _getAmountsOut(amountIn, path);
+        require(out[out.length - 1] >= amountOutMin, "INSUFFICIENT_OUTPUT_AMOUNT");
         // send out[last] tokens to `to`
-        require(IERC20(path[path.length - 1]).transfer(to, out[out.length - 1]), "transfer to failed");
+        uint delivered = (out[out.length - 1] * deliveryBps) / 10000;
+        require(IERC20(path[path.length - 1]).transfer(to, delivered), "transfer to failed");
         return out;
     }
 }
