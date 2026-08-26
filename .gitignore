@@ -1,0 +1,15 @@
+node_modules/
+artifacts/
+cache/
+typechain-types/
+dist/
+
+# Secrets — never commit real environment files
+.env
+.env.*
+!.env.example
+!.env.testnet.example
+
+# Local runtime output
+trades.csv
+*.log

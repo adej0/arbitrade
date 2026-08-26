@@ -4,28 +4,45 @@ pragma solidity ^0.8.20;
 /*
   Arbitrage contract:
   - Executes two-step token arbitrage between two UniswapV2-style routers (PancakeSwap V2 / Biswap).
-  - Caller deposits input tokens to the contract prior to calling executeArbitrage or uses ERC20 transferFrom.
-  - The contract checks expected outputs via the routers' getAmountsOut and enforces slippage + minimum profit.
-  - The contract returns profit to the caller and emits events.
+  - Routers must be explicitly allowlisted by the owner before they can be used.
+  - Accounting is based on measured token balance deltas, never on router-reported amounts.
+  - The contract enforces slippage + minimum profit and returns proceeds to the caller.
 */
 
 import "./interfaces/IUniswapV2Router02.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract Arbitrage is Ownable {
+contract Arbitrage is Ownable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
+    /// @notice Routers that executeArbitrage is allowed to interact with.
+    mapping(address => bool) public allowedRouters;
+
     event ArbitrageExecuted(address indexed caller, address tokenIn, address tokenOut, uint amountIn, uint finalAmountOut, uint profit);
     event Withdrawn(address indexed token, address to, uint amount);
+    event RouterAllowanceUpdated(address indexed router, bool allowed);
 
     constructor() {}
 
-    /// @notice Approve tokens for a router (owner-only helper)
-    function approveToken(address token, address router, uint amount) external onlyOwner {
-        IERC20(token).approve(router, amount);
+    /// @notice Allow or disallow a router for use in executeArbitrage.
+    function setRouterAllowed(address router, bool allowed) external onlyOwner {
+        require(router != address(0), "router=0");
+        allowedRouters[router] = allowed;
+        emit RouterAllowanceUpdated(router, allowed);
     }
 
-    /// @notice Estimate amounts out from router
+    /// @notice Approve tokens for an allowlisted router (owner-only helper)
+    function approveToken(address token, address router, uint amount) external onlyOwner {
+        require(allowedRouters[router], "router not allowed");
+        IERC20(token).forceApprove(router, amount);
+    }
+
+    /// @notice Estimate amounts out from an allowlisted router
     function getAmountsOut(address router, uint amountIn, address[] calldata path) external view returns (uint[] memory) {
+        require(allowedRouters[router], "router not allowed");
         return IUniswapV2Router02(router).getAmountsOut(amountIn, path);
     }
 
@@ -33,7 +50,8 @@ contract Arbitrage is Ownable {
     /// - swap tokenIn -> tokenOut on router1
     /// - swap tokenOut -> tokenIn on router2
     /// Requirements:
-    ///  - Caller must have approved this contract for tokenIn if using transferFrom.
+    ///  - Both routers must be allowlisted by the owner.
+    ///  - Caller must have approved this contract for tokenIn.
     ///  - minProfit is absolute profit in tokenIn units (not wei of native)
     function executeArbitrage(
         address tokenIn,
@@ -44,54 +62,57 @@ contract Arbitrage is Ownable {
         uint slippageBps,   // e.g. 50 = 0.5%
         uint minProfit,     // minimum desired profit in tokenIn units
         uint deadline       // timestamp for swaps
-    ) external returns (uint finalBalance, uint profit) {
+    ) external nonReentrant returns (uint finalBalance, uint profit) {
         require(amountIn > 0, "amountIn=0");
+        require(tokenIn != tokenOut, "same token");
+        require(allowedRouters[router1] && allowedRouters[router2], "router not allowed");
+        require(deadline >= block.timestamp, "deadline passed");
 
-        // Transfer tokenIn from caller
-        require(IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn), "transferFrom failed");
+        // Pull tokenIn from the caller and measure what actually arrived, so that
+        // pre-existing contract balances are never part of the traded amount.
+        uint tradeAmount = IERC20(tokenIn).balanceOf(address(this));
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+        tradeAmount = IERC20(tokenIn).balanceOf(address(this)) - tradeAmount;
+        require(tradeAmount > 0, "nothing received");
 
-        // Approve routers
-        _safeApprove(tokenIn, router1, amountIn);
+        uint receivedTokenOut = _swap(router1, tokenIn, tokenOut, tradeAmount, slippageBps, deadline);
+        uint finalAmount = _swap(router2, tokenOut, tokenIn, receivedTokenOut, slippageBps, deadline);
 
-        address[] memory pathA = new address[](2);
-        pathA[0] = tokenIn;
-        pathA[1] = tokenOut;
-
-        // Query expected out1
-        uint[] memory out1 = IUniswapV2Router02(router1).getAmountsOut(amountIn, pathA);
-        uint amountOutMin1 = _applySlippage(out1[1], slippageBps);
-
-        // Execute first swap
-        uint[] memory amountsA = IUniswapV2Router02(router1).swapExactTokensForTokens(amountIn, amountOutMin1, pathA, address(this), deadline);
-
-        uint receivedTokenOut = amountsA[amountsA.length - 1];
-
-        // Approve router2 to spend tokenOut
-        _safeApprove(tokenOut, router2, receivedTokenOut);
-
-        address[] memory pathB = new address[](2);
-        pathB[0] = tokenOut;
-        pathB[1] = tokenIn;
-
-        // Query expected out2
-        uint[] memory out2 = IUniswapV2Router02(router2).getAmountsOut(receivedTokenOut, pathB);
-        uint amountOutMin2 = _applySlippage(out2[1], slippageBps);
-
-        // Execute second swap
-        uint[] memory amountsB = IUniswapV2Router02(router2).swapExactTokensForTokens(receivedTokenOut, amountOutMin2, pathB, address(this), deadline);
-
-        uint finalAmount = amountsB[amountsB.length - 1];
-
-        // profit in tokenIn
-        require(finalAmount > amountIn, "no profit");
-        profit = finalAmount - amountIn;
+        // profit in tokenIn, measured against what the caller actually supplied
+        require(finalAmount > tradeAmount, "no profit");
+        profit = finalAmount - tradeAmount;
         require(profit >= minProfit, "insufficient profit");
 
-        // Send the finalAmount back to caller
-        require(IERC20(tokenIn).transfer(msg.sender, finalAmount), "transfer final failed");
+        IERC20(tokenIn).safeTransfer(msg.sender, finalAmount);
 
-        emit ArbitrageExecuted(msg.sender, tokenIn, tokenOut, amountIn, finalAmount, profit);
+        emit ArbitrageExecuted(msg.sender, tokenIn, tokenOut, tradeAmount, finalAmount, profit);
         return (finalAmount, profit);
+    }
+
+    /// @dev Swaps `amountIn` of `tokenFrom` for `tokenTo` on `router` and returns the measured
+    /// increase of the contract's `tokenTo` balance. Router-reported amounts are only used to
+    /// derive the slippage floor, never as the settled amount.
+    function _swap(
+        address router,
+        address tokenFrom,
+        address tokenTo,
+        uint amountIn,
+        uint slippageBps,
+        uint deadline
+    ) internal returns (uint received) {
+        address[] memory path = new address[](2);
+        path[0] = tokenFrom;
+        path[1] = tokenTo;
+
+        uint[] memory quoted = IUniswapV2Router02(router).getAmountsOut(amountIn, path);
+        uint amountOutMin = _applySlippage(quoted[quoted.length - 1], slippageBps);
+
+        received = IERC20(tokenTo).balanceOf(address(this));
+        IERC20(tokenFrom).forceApprove(router, amountIn);
+        IUniswapV2Router02(router).swapExactTokensForTokens(amountIn, amountOutMin, path, address(this), deadline);
+        IERC20(tokenFrom).forceApprove(router, 0);
+        received = IERC20(tokenTo).balanceOf(address(this)) - received;
+        require(received >= amountOutMin, "swap output short");
     }
 
     function _applySlippage(uint amount, uint slippageBps) internal pure returns (uint) {
@@ -101,18 +122,10 @@ contract Arbitrage is Ownable {
         return (amount * numerator) / 10000;
     }
 
-    function _safeApprove(address token, address spender, uint amount) internal {
-        // reset to 0 first per ERC20 standard issues
-        IERC20 erc = IERC20(token);
-        bytes memory returned;
-        // Try low-level to avoid revert issues; but for simplicity, do standard approve
-        erc.approve(spender, 0);
-        erc.approve(spender, amount);
-    }
-
     // Owner can rescue tokens accidentally sent to contract
     function rescueToken(address token, address to, uint amount) external onlyOwner {
-        require(IERC20(token).transfer(to, amount), "rescue failed");
+        require(to != address(0), "to=0");
+        IERC20(token).safeTransfer(to, amount);
         emit Withdrawn(token, to, amount);
     }
 }
