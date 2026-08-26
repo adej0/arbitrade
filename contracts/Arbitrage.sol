@@ -10,6 +10,8 @@ pragma solidity ^0.8.20;
 */
 
 import "./interfaces/IUniswapV2Router02.sol";
+import "./libraries/SwapUtils.sol";
+import "./libraries/TokenUtils.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -48,39 +50,10 @@ contract Arbitrage is Ownable {
         require(amountIn > 0, "amountIn=0");
 
         // Transfer tokenIn from caller
-        require(IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn), "transferFrom failed");
+        TokenUtils.safeTransferFrom(IERC20(tokenIn), msg.sender, address(this), amountIn);
 
-        // Approve routers
-        _safeApprove(tokenIn, router1, amountIn);
-
-        address[] memory pathA = new address[](2);
-        pathA[0] = tokenIn;
-        pathA[1] = tokenOut;
-
-        // Query expected out1
-        uint[] memory out1 = IUniswapV2Router02(router1).getAmountsOut(amountIn, pathA);
-        uint amountOutMin1 = _applySlippage(out1[1], slippageBps);
-
-        // Execute first swap
-        uint[] memory amountsA = IUniswapV2Router02(router1).swapExactTokensForTokens(amountIn, amountOutMin1, pathA, address(this), deadline);
-
-        uint receivedTokenOut = amountsA[amountsA.length - 1];
-
-        // Approve router2 to spend tokenOut
-        _safeApprove(tokenOut, router2, receivedTokenOut);
-
-        address[] memory pathB = new address[](2);
-        pathB[0] = tokenOut;
-        pathB[1] = tokenIn;
-
-        // Query expected out2
-        uint[] memory out2 = IUniswapV2Router02(router2).getAmountsOut(receivedTokenOut, pathB);
-        uint amountOutMin2 = _applySlippage(out2[1], slippageBps);
-
-        // Execute second swap
-        uint[] memory amountsB = IUniswapV2Router02(router2).swapExactTokensForTokens(receivedTokenOut, amountOutMin2, pathB, address(this), deadline);
-
-        uint finalAmount = amountsB[amountsB.length - 1];
+        uint receivedTokenOut = _swapLeg(router1, tokenIn, tokenOut, amountIn, slippageBps, deadline);
+        uint finalAmount = _swapLeg(router2, tokenOut, tokenIn, receivedTokenOut, slippageBps, deadline);
 
         // profit in tokenIn
         require(finalAmount > amountIn, "no profit");
@@ -88,31 +61,30 @@ contract Arbitrage is Ownable {
         require(profit >= minProfit, "insufficient profit");
 
         // Send the finalAmount back to caller
-        require(IERC20(tokenIn).transfer(msg.sender, finalAmount), "transfer final failed");
+        TokenUtils.safeTransfer(IERC20(tokenIn), msg.sender, finalAmount);
 
         emit ArbitrageExecuted(msg.sender, tokenIn, tokenOut, amountIn, finalAmount, profit);
         return (finalAmount, profit);
     }
 
-    function _applySlippage(uint amount, uint slippageBps) internal pure returns (uint) {
-        // slippageBps is in basis points (1 bps = 0.01%)
-        require(slippageBps <= 10000, "slippage>10000");
-        uint numerator = (10000 - slippageBps);
-        return (amount * numerator) / 10000;
-    }
-
-    function _safeApprove(address token, address spender, uint amount) internal {
-        // reset to 0 first per ERC20 standard issues
-        IERC20 erc = IERC20(token);
-        bytes memory returned;
-        // Try low-level to avoid revert issues; but for simplicity, do standard approve
-        erc.approve(spender, 0);
-        erc.approve(spender, amount);
+    function _swapLeg(
+        address router,
+        address tokenFrom,
+        address tokenTo,
+        uint amountIn,
+        uint slippageBps,
+        uint deadline
+    ) internal returns (uint amountOut) {
+        TokenUtils.safeApprove(IERC20(tokenFrom), router, amountIn);
+        address[] memory path = SwapUtils.pairPath(tokenFrom, tokenTo);
+        uint expected = SwapUtils.last(IUniswapV2Router02(router).getAmountsOut(amountIn, path));
+        uint minOut = SwapUtils.applySlippage(expected, slippageBps);
+        return SwapUtils.last(IUniswapV2Router02(router).swapExactTokensForTokens(amountIn, minOut, path, address(this), deadline));
     }
 
     // Owner can rescue tokens accidentally sent to contract
     function rescueToken(address token, address to, uint amount) external onlyOwner {
-        require(IERC20(token).transfer(to, amount), "rescue failed");
+        TokenUtils.safeTransfer(IERC20(token), to, amount);
         emit Withdrawn(token, to, amount);
     }
 }

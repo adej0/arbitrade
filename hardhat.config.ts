@@ -21,6 +21,12 @@ dotenv.config();
 const RPC_TESTNET = process.env.RPC_URL_TESTNET || "";
 const RPC_MAINNET = process.env.RPC_URL_MAINNET || "";
 const PRIVATE_KEY = process.env.PRIVATE_KEY && process.env.PRIVATE_KEY.length > 0 ? process.env.PRIVATE_KEY : "";
+const BSCSCAN_API_KEY = process.env.BSC_ETHERSCAN_API_KEY || "";
+const bscNetwork = (url: string, chainId: number) => ({
+  url,
+  chainId,
+  accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
+});
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -37,23 +43,15 @@ const config: HardhatUserConfig = {
     hardhat: {
       // default hardhat config
     },
-    bscTestnet: {
-      url: RPC_TESTNET,
-      chainId: 97,
-      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
-    },
-    bscMainnet: {
-      url: RPC_MAINNET,
-      chainId: 56,
-      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
-    }
+    bscTestnet: bscNetwork(RPC_TESTNET, 97),
+    bscMainnet: bscNetwork(RPC_MAINNET, 56)
   },
 
   etherscan: {
     // Etherscan / BscScan API keys (optionally set BSC_ETHERSCAN_API_KEY in .env)
     apiKey: {
-      bsc: process.env.BSC_ETHERSCAN_API_KEY || "",
-      bscTestnet: process.env.BSC_ETHERSCAN_API_KEY || ""
+      bsc: BSCSCAN_API_KEY,
+      bscTestnet: BSCSCAN_API_KEY
     }
   },
 

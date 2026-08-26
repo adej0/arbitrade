@@ -3,6 +3,8 @@ pragma solidity ^0.8.20;
 
 import "./MockERC20.sol";
 import "./../interfaces/IUniswapV2Router02.sol";
+import "./../libraries/SwapUtils.sol";
+import "./../libraries/TokenUtils.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @dev Simplified mock router that uses a fixed price ratio for getAmountsOut and emulates swapExactTokensForTokens.
@@ -22,6 +24,10 @@ contract MockRouter is IUniswapV2Router02 {
     }
 
     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts) {
+        return _amountsOut(amountIn, path);
+    }
+
+    function _amountsOut(uint amountIn, address[] memory path) internal view returns (uint[] memory amounts) {
         require(path.length >= 2, "bad path");
         amounts = new uint[](path.length);
         amounts[0] = amountIn;
@@ -40,11 +46,11 @@ contract MockRouter is IUniswapV2Router02 {
         uint /*deadline*/
     ) external returns (uint[] memory amounts) {
         // transfer amountIn from caller to this contract
-        require(IERC20(path[0]).transferFrom(msg.sender, address(this), amountIn), "transferFrom failed");
+        TokenUtils.safeTransferFrom(IERC20(path[0]), msg.sender, address(this), amountIn);
         // compute output amount by ratio
-        uint[] memory out = getAmountsOut(amountIn, path);
+        uint[] memory out = _amountsOut(amountIn, path);
         // send out[last] tokens to `to`
-        require(IERC20(path[path.length - 1]).transfer(to, out[out.length - 1]), "transfer to failed");
+        TokenUtils.safeTransfer(IERC20(path[path.length - 1]), to, SwapUtils.last(out));
         return out;
     }
 }
