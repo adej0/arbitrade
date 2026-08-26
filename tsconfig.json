@@ -9,6 +9,6 @@
     "skipLibCheck": true,
     "sourceMap": true
   },
-  "include": ["scripts", "bot", "test"],
+  "include": ["scripts", "bot", "test", "typechain-types"],
   "exclude": ["node_modules"]
 }
