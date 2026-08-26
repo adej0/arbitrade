@@ -6,6 +6,7 @@
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
+    "coverage": "hardhat coverage",
     "lint": "echo \"no lint configured\"",
     "deploy:testnet": "hardhat run --network bscTestnet scripts/deploy.ts",
     "deploy:mainnet": "hardhat run --network bscMainnet scripts/deploy.ts",
@@ -20,14 +21,15 @@
     "@types/node": "^18.0.0",
     "chai": "^4.3.7",
     "hardhat": "^2.16.0",
+    "solidity-coverage": "^0.8.17",
     "ts-node": "^10.9.1",
     "typescript": "^5.1.6"
   },
   "dependencies": {
+    "@openzeppelin/contracts": "^4.9.0",
     "csv-writer": "^1.6.0",
     "dotenv": "^16.0.0",
     "ethers": "^6.9.0",
-    "node-telegram-bot-api": "^0.61.0",
-    "@openzeppelin/contracts": "^4.9.0"
+    "node-telegram-bot-api": "^0.61.0"
   }
 }
